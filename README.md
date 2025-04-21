@@ -1,0 +1,2 @@
+# artificialneuralnetwork
+Matlab Ortamında geliştirilen tahminleyiciler
