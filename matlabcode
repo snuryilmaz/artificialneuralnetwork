@@ -1,0 +1,186 @@
+% Başlangıç Ayarları
+clear;
+close all;
+clc;
+nntwarn off;
+format short g
+
+% -------------------------------------------
+% Excel Dosyası ve Sayfa Ayarları
+excelDosya = 'E:\ysa ödev2\formulaDataset.xlsx';
+
+% Exceldeki Performans ve Ağırlıklar sayfalarındaki A1 hücrelerini temizleme
+xlswrite(excelDosya, {''}, 'Performans', 'A1');
+xlswrite(excelDosya, {''}, 'Agirliklar', 'A1');
+xlswrite(excelDosya, {''}, 'Bias', 'A1');
+
+% -------------------------------------------
+% Veri Okuma
+butunveri = xlsread(excelDosya, 'butun veriler', 'A2:G201');
+
+% Eğitim ve Test Verilerinin Ayarlanması
+egitimgirdi = butunveri(1:200, 1:6)'; % Girdi verileri (6 giriş özelliği)
+egitimcikti = butunveri(1:200, 7)';  % Çıktı verileri (1 çıktı)
+
+% Eğitim, Doğrulama ve Test verileri ayrımı
+egirdi = egitimgirdi(:, 1:140);        % İlk 140 örnek: Eğitim girdileri
+ecikti = egitimcikti(1:140);          % İlk 140 örnek: Eğitim çıktıları
+
+egirdidogrulama = egitimgirdi(:, 141:170); % 141-170 arası: Doğrulama girdileri
+eciktidogrulama = egitimcikti(141:170);   % 141-170 arası: Doğrulama çıktıları
+
+egirditest = egitimgirdi(:, 171:200);    % 171-200 arası: Test girdileri
+eciktitest = egitimcikti(171:200);      % 171-200 arası: Test çıktıları
+
+% -------------------------------------------
+% Normalizasyon İşlemi (premnmx)
+[egirdiN, egirmin, egirmax] = premnmx(egirdi);
+[eciktiN, ecikmin, ecikmax] = premnmx(ecikti);
+
+egirdidogrulamaN = tramnmx(egirdidogrulama, egirmin, egirmax);
+eciktidogrulamaN = tramnmx(eciktidogrulama, ecikmin, ecikmax);
+
+egirditestN = tramnmx(egirditest, egirmin, egirmax);
+eciktitestN = tramnmx(eciktitest, ecikmin, ecikmax);
+
+% -------------------------------------------
+% Yapay Sinir Ağı Modeli Oluşturma
+% gizliKatman = [15, 15]; % 2 gizli katman, her birinde 15 nöron
+yenimodel = newff(minmax(egirdi), [2, 2, 1], {'tansig', 'tansig', 'purelin'}, 'trainlm');
+
+% Eğitim Parametreleri
+yenimodel.trainParam.epochs = 250;
+yenimodel.trainParam.goal = 0.0001;
+yenimodel.trainParam.lr = 0.3;
+yenimodel.trainParam.mc = 0.92;
+yenimodel.trainParam.max_fail = 10;
+
+% Modeli başlat
+yenimodel = init(yenimodel);
+
+% -------------------------------------------
+% Model Eğitimi
+[yenimodel, tr] = train(yenimodel, egirdiN, eciktiN);
+
+% -------------------------------------------
+% Model Testi ve Tahminler
+tahminEgitim = sim(yenimodel, egirdiN);
+tahminTest = sim(yenimodel, egirditestN);
+tahminDogrulama = sim(yenimodel, egirdidogrulamaN);
+
+% Ters Normalizasyon
+tahminEgitimGeri = postmnmx(tahminEgitim, ecikmin, ecikmax);
+tahminTestGeri = postmnmx(tahminTest, ecikmin, ecikmax);
+tahminDogrulamaGeri = postmnmx(tahminDogrulama, ecikmin, ecikmax);
+
+% Sapma Değerleri
+sapmaEgitim = abs(ecikti - tahminEgitimGeri);
+sapmaDogrulama = abs(eciktidogrulama - tahminDogrulamaGeri);
+sapmaTest = abs(eciktitest - tahminTestGeri);
+
+% -------------------------------------------
+% Performans Değerleri Hesaplama
+egitimMape = mean(abs((ecikti - tahminEgitimGeri) ./ ecikti)) * 100;
+egitimRmse = sqrt(mean((ecikti - tahminEgitimGeri).^2));
+
+dogrulamaMape = mean(abs((eciktidogrulama - tahminDogrulamaGeri) ./ eciktidogrulama)) * 100;
+dogrulamaRmse = sqrt(mean((eciktidogrulama - tahminDogrulamaGeri).^2));
+
+testMape = mean(abs((eciktitest - tahminTestGeri) ./ eciktitest)) * 100;
+testRmse = sqrt(mean((eciktitest - tahminTestGeri).^2));
+
+performansdegerleri = [egitimMape, dogrulamaMape, testMape, egitimRmse, dogrulamaRmse, testRmse];
+
+% Performans sonuçlarını Excel'e yazma
+xlswrite(excelDosya, {'Eğitim MAPE', 'Doğrulama MAPE', 'Test MAPE', 'Eğitim RMSE', 'Doğrulama RMSE', 'Test RMSE'}, 'Performans', 'A1');
+xlswrite(excelDosya, performansdegerleri, 'Performans', 'A2');
+
+% Tahmin ve Sapma Değerlerini Bütün Veriler Sayfasına Yazma (H ve I Kolonlarına)
+xlswrite(excelDosya, {'Tahmin Değerleri'}, 'butun veriler', 'H1');
+xlswrite(excelDosya, [tahminEgitimGeri, tahminDogrulamaGeri, tahminTestGeri]', 'butun veriler', 'H2');
+
+xlswrite(excelDosya, {'Sapma Değerleri'}, 'butun veriler', 'I1');
+xlswrite(excelDosya, [sapmaEgitim, sapmaDogrulama, sapmaTest]', 'butun veriler', 'I2');
+
+% -------------------------------------------
+% Regresyon Analizi ve Grafikler
+figure(1)
+postreg(tahminEgitimGeri, ecikti);
+title('Eğitim Verileri Regresyon Grafiği');
+
+figure(2)
+postreg(tahminDogrulamaGeri, eciktidogrulama);
+title('Doğrulama Verileri Regresyon Grafiği');
+
+figure(3)
+postreg(tahminTestGeri, eciktitest);
+title('Test Verileri Regresyon Grafiği');
+
+% Eğitim Verisi Grafiği
+figure(4)
+plot(ecikti, '-or', 'LineWidth', 1);
+hold on
+plot(tahminEgitimGeri, '-.*b', 'LineWidth', 1);
+title('Eğitim Verileri');
+legend('Gerçek', 'Tahmin');
+xlabel('Örnekler');
+ylabel('Başarı Olasılığı');
+
+% Doğrulama Verisi Grafiği
+figure(5)
+plot(eciktidogrulama, '-or', 'LineWidth', 1);
+hold on
+plot(tahminDogrulamaGeri, '-.*b', 'LineWidth', 1);
+title('Doğrulama Verileri');
+legend('Gerçek', 'Tahmin');
+xlabel('Örnekler');
+ylabel('Başarı Olasılığı');
+
+% Test Verisi Grafiği
+figure(6)
+plot(eciktitest, '-or', 'LineWidth', 1);
+hold on
+plot(tahminTestGeri, '-.*b', 'LineWidth', 1);
+title('Test Verileri');
+legend('Gerçek', 'Tahmin');
+xlabel('Örnekler');
+ylabel('Başarı Olasılığı');
+
+% Regresyon Grafiği
+figure(7)
+plot(tahminEgitimGeri, ecikti, 'ob');
+hold on;
+plot(tahminDogrulamaGeri, eciktidogrulama, 'or');
+plot(tahminTestGeri, eciktitest, 'og');
+plot([min(ecikti), max(ecikti)], [min(ecikti), max(ecikti)], '-k');
+title('Genel Regresyon Grafiği');
+xlabel('Gerçek Değerler');
+ylabel('Tahmin Değerleri');
+legend('Eğitim', 'Doğrulama', 'Test', 'Y=X Doğrusu');
+grid on;
+hold off;
+
+% -------------------------------------------
+% Model Parametrelerini Kaydetme
+% Ağırlık ve Bias değerlerini başlıklarla birlikte yazma
+
+% Girdi ağırlıklarını yazma
+xlswrite(excelDosya, {'Girdi Ağırlıkları'}, 'Agirliklar', 'A1');
+xlswrite(excelDosya, yenimodel.IW{1, 1}, 'Agirliklar', 'A2');
+
+% Çıktı ağırlıklarını yazma (dinamik olarak 5 satır aralık bırak)
+girdiAgirlikSatirSayisi = size(yenimodel.IW{1, 1}, 1) + 2;
+xlswrite(excelDosya, {'Çıktı Ağırlıkları'}, 'Agirliklar', ['A', num2str(girdiAgirlikSatirSayisi + 5)]);
+xlswrite(excelDosya, yenimodel.LW{2, 1}, 'Agirliklar', ['A', num2str(girdiAgirlikSatirSayisi + 6)]);
+
+% Girdi bias değerlerini yazma
+xlswrite(excelDosya, {'Girdi Bias'}, 'Bias', 'A1');
+xlswrite(excelDosya, yenimodel.b{1}, 'Bias', 'A2');
+
+% Çıktı bias değerlerini yazma (dinamik olarak 5 satır aralık bırak)
+girdiBiasSatirSayisi = size(yenimodel.b{1}, 1) + 2;
+xlswrite(excelDosya, {'Çıktı Bias'}, 'Bias', ['A', num2str(girdiBiasSatirSayisi + 5)]);
+xlswrite(excelDosya, yenimodel.b{2}, 'Bias', ['A', num2str(girdiBiasSatirSayisi + 6)]);
+
+% Model Kaydetme
+save('E:\ysa ödev2\degiskenkaydetmeNew', 'yenimodel');
