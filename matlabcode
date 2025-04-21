@@ -6,7 +6,7 @@ nntwarn off;
 format short g
 
 % -------------------------------------------
-% Excel Dosyası ve Sayfa Ayarları
+% Excel Dosyası yolu/ dosya bulma
 excelDosya = 'E:\ysa ödev2\formulaDataset.xlsx';
 
 % Exceldeki Performans ve Ağırlıklar sayfalarındaki A1 hücrelerini temizleme
@@ -15,7 +15,7 @@ xlswrite(excelDosya, {''}, 'Agirliklar', 'A1');
 xlswrite(excelDosya, {''}, 'Bias', 'A1');
 
 % -------------------------------------------
-% Veri Okuma
+% excel dosyasından Veri Okuma
 butunveri = xlsread(excelDosya, 'butun veriler', 'A2:G201');
 
 % Eğitim ve Test Verilerinin Ayarlanması
@@ -182,5 +182,5 @@ girdiBiasSatirSayisi = size(yenimodel.b{1}, 1) + 2;
 xlswrite(excelDosya, {'Çıktı Bias'}, 'Bias', ['A', num2str(girdiBiasSatirSayisi + 5)]);
 xlswrite(excelDosya, yenimodel.b{2}, 'Bias', ['A', num2str(girdiBiasSatirSayisi + 6)]);
 
-% Model Kaydetme
+% Model Kaydetme yeni excel dosyası
 save('E:\ysa ödev2\degiskenkaydetmeNew', 'yenimodel');
